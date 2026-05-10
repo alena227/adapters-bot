@@ -67,7 +67,7 @@ def _google_time():
 
 
 def _get_client():
-    creds_b64 = os.getenv("GOOGLE_CREDENTIALS_BASE64") or _CREDENTIALS_B64
+    creds_b64 = _CREDENTIALS_B64
     creds_info = json.loads(base64.b64decode(creds_b64).decode("utf-8"))
 
     now = _google_time()
