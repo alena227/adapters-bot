@@ -1,3 +1,6 @@
+import os
+import json
+import base64
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
@@ -13,7 +16,13 @@ SCOPES = [
 
 
 def _get_client():
-    creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+    # Читаем credentials из переменной окружения (base64) или из файла
+    creds_b64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
+    if creds_b64:
+        creds_info = json.loads(base64.b64decode(creds_b64).decode("utf-8"))
+        creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
     return gspread.authorize(creds)
 
 
