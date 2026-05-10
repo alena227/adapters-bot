@@ -4,7 +4,8 @@ import base64
 import time
 import gspread
 import requests as _req
-import rsa as _rsa
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding as _asym_padding
 from google.oauth2.credentials import Credentials as OAuthCreds
 from datetime import datetime
 from config import (
@@ -26,32 +27,9 @@ def _b64url(data):
     return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
 
 
-def _der_read_len(data, pos):
-    if data[pos] < 0x80:
-        return pos + 1, data[pos]
-    n = data[pos] & 0x7f
-    return pos + 1 + n, int.from_bytes(data[pos+1:pos+1+n], 'big')
-
-
-def _load_rsa_key(pem_str: str) -> _rsa.PrivateKey:
-    pem_lines = pem_str.strip().splitlines()
-    b64 = ''.join(l for l in pem_lines if not l.startswith('-----'))
-    der = base64.b64decode(b64)
-    # PKCS8: SEQUENCE { INTEGER(version), SEQUENCE(alg), OCTET STRING(pkcs1) }
-    pos = 1  # skip outer SEQUENCE tag 0x30
-    pos, _ = _der_read_len(der, pos)
-    pos += 1  # skip INTEGER tag 0x02
-    pos, n = _der_read_len(der, pos)
-    pos += n  # skip version value
-    pos += 1  # skip SEQUENCE tag 0x30
-    pos, n = _der_read_len(der, pos)
-    pos += n  # skip algorithm identifier
-    pos += 1  # skip OCTET STRING tag 0x04
-    pos, n = _der_read_len(der, pos)
-    pkcs1_der = der[pos:pos + n]
-    inner_b64 = base64.b64encode(pkcs1_der).decode()
-    pkcs1_pem = f"-----BEGIN RSA PRIVATE KEY-----\n{inner_b64}\n-----END RSA PRIVATE KEY-----\n"
-    return _rsa.PrivateKey.load_pkcs1(pkcs1_pem.encode())
+def _sign_rs256(data: bytes, pem_str: str) -> bytes:
+    private_key = serialization.load_pem_private_key(pem_str.encode(), password=None)
+    return private_key.sign(data, _asym_padding.PKCS1v15(), hashes.SHA256())
 
 
 def _google_time():
@@ -80,8 +58,7 @@ def _get_client():
         "iat": now,
     })
     signing_input = f"{header}.{payload}".encode()
-    privkey = _load_rsa_key(creds_info["private_key"])
-    signature = _rsa.sign(signing_input, privkey, "SHA-256")
+    signature = _sign_rs256(signing_input, creds_info["private_key"])
     jwt_token = f"{header}.{payload}.{_b64url(signature)}"
 
     resp = _req.post(
