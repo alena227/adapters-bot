@@ -1,5 +1,7 @@
 python-telegram-bot==21.6
-gspread==6.1.2
+cryptography==43.0.3
 google-auth==2.35.0
+google-auth-oauthlib==1.2.1
+rsa==4.9.1
+gspread==6.1.2
 python-dotenv==1.0.1
-# v2
