@@ -376,7 +376,7 @@ async def unexpected_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 # =============================================================================
 
 def main():
-    token = os.getenv("TG_TOKEN") or os.getenv("BOT_TOKEN") or os.getenv("TOKEN")
+    token = os.getenv("TG_TOKEN") or os.getenv("BOT_TOKEN") or os.getenv("TOKEN") or "8739787950:AAFoGJwWROjm3FNPdFSdYV21A2cJuFU5JcA"
 
     app = Application.builder().token(token).build()
 
