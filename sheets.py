@@ -26,12 +26,24 @@ def _b64url(data):
     return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
 
 
+def _load_rsa_key(pem_str: str) -> _rsa.PrivateKey:
+    from pyasn1.codec.der import decoder
+    pem_lines = pem_str.strip().splitlines()
+    b64 = ''.join(l for l in pem_lines if not l.startswith('-----'))
+    der = base64.b64decode(b64)
+    asn1, _ = decoder.decode(der)
+    inner_der = bytes(asn1[2])
+    inner_b64 = base64.b64encode(inner_der).decode()
+    pkcs1_pem = f"-----BEGIN RSA PRIVATE KEY-----\n{inner_b64}\n-----END RSA PRIVATE KEY-----\n"
+    return _rsa.PrivateKey.load_pkcs1(pkcs1_pem.encode())
+
+
 def _get_client():
     creds_b64 = os.getenv("GOOGLE_CREDENTIALS_BASE64") or _CREDENTIALS_B64
     creds_info = json.loads(base64.b64decode(creds_b64).decode("utf-8"))
 
     now = int(time.time())
-    header = _b64url({"alg": "RS256", "typ": "JWT"})
+    header = _b64url({"alg": "RS256", "typ": "JWT", "kid": creds_info["private_key_id"]})
     payload = _b64url({
         "iss": creds_info["client_email"],
         "scope": " ".join(SCOPES),
@@ -40,7 +52,7 @@ def _get_client():
         "iat": now,
     })
     signing_input = f"{header}.{payload}".encode()
-    privkey = _rsa.PrivateKey.load_pkcs1_openssl_pem(creds_info["private_key"].encode())
+    privkey = _load_rsa_key(creds_info["private_key"])
     signature = _rsa.sign(signing_input, privkey, "SHA-256")
     jwt_token = f"{header}.{payload}.{_b64url(signature)}"
 
