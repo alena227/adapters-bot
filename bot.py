@@ -377,8 +377,6 @@ async def unexpected_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 def main():
     token = os.getenv("BOT_TOKEN")
-    if not token:
-        raise ValueError("BOT_TOKEN не задан в .env файле!")
 
     app = Application.builder().token(token).build()
 
