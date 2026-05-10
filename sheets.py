@@ -26,23 +26,51 @@ def _b64url(data):
     return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
 
 
+def _der_read_len(data, pos):
+    if data[pos] < 0x80:
+        return pos + 1, data[pos]
+    n = data[pos] & 0x7f
+    return pos + 1 + n, int.from_bytes(data[pos+1:pos+1+n], 'big')
+
+
 def _load_rsa_key(pem_str: str) -> _rsa.PrivateKey:
-    from pyasn1.codec.der import decoder
     pem_lines = pem_str.strip().splitlines()
     b64 = ''.join(l for l in pem_lines if not l.startswith('-----'))
     der = base64.b64decode(b64)
-    asn1, _ = decoder.decode(der)
-    inner_der = bytes(asn1[2])
-    inner_b64 = base64.b64encode(inner_der).decode()
+    # PKCS8: SEQUENCE { INTEGER(version), SEQUENCE(alg), OCTET STRING(pkcs1) }
+    pos = 1  # skip outer SEQUENCE tag 0x30
+    pos, _ = _der_read_len(der, pos)
+    pos += 1  # skip INTEGER tag 0x02
+    pos, n = _der_read_len(der, pos)
+    pos += n  # skip version value
+    pos += 1  # skip SEQUENCE tag 0x30
+    pos, n = _der_read_len(der, pos)
+    pos += n  # skip algorithm identifier
+    pos += 1  # skip OCTET STRING tag 0x04
+    pos, n = _der_read_len(der, pos)
+    pkcs1_der = der[pos:pos + n]
+    inner_b64 = base64.b64encode(pkcs1_der).decode()
     pkcs1_pem = f"-----BEGIN RSA PRIVATE KEY-----\n{inner_b64}\n-----END RSA PRIVATE KEY-----\n"
     return _rsa.PrivateKey.load_pkcs1(pkcs1_pem.encode())
+
+
+def _google_time():
+    try:
+        import email.utils
+        r = _req.get("https://www.googleapis.com/", timeout=10)
+        date_hdr = r.headers.get("Date", "")
+        if date_hdr:
+            return int(email.utils.parsedate_to_datetime(date_hdr).timestamp())
+    except Exception:
+        pass
+    return int(time.time())
 
 
 def _get_client():
     creds_b64 = os.getenv("GOOGLE_CREDENTIALS_BASE64") or _CREDENTIALS_B64
     creds_info = json.loads(base64.b64decode(creds_b64).decode("utf-8"))
 
-    now = int(time.time())
+    now = _google_time()
     header = _b64url({"alg": "RS256", "typ": "JWT", "kid": creds_info["private_key_id"]})
     payload = _b64url({
         "iss": creds_info["client_email"],
